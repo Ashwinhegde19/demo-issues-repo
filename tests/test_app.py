@@ -103,6 +103,75 @@ class TestFilterAPI:
         assert data['title'] == 'New Test Task'
         assert data['status'] == 'pending'
 
+    # ==================== Pagination Tests ====================
+
+    def test_pagination_default_limit(self, filter_client):
+        """Test default pagination returns 10 items."""
+        response = filter_client.get('/tasks')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert 'pagination' in data
+        assert data['pagination']['limit'] == 10
+        assert data['pagination']['offset'] == 0
+        assert 'has_more' in data['pagination']
+        assert 'total_count' in data
+
+    def test_pagination_with_limit(self, filter_client):
+        """Test pagination with custom limit."""
+        response = filter_client.get('/tasks?limit=2')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert len(data['tasks']) == 2
+        assert data['count'] == 2
+        assert data['pagination']['limit'] == 2
+        assert data['pagination']['has_more'] is True
+
+    def test_pagination_with_limit_and_offset(self, filter_client):
+        """Test pagination with limit and offset."""
+        # First page
+        response = filter_client.get('/tasks?limit=2&offset=0')
+        data = json.loads(response.data)
+        first_task_ids = [t['id'] for t in data['tasks']]
+        
+        # Second page
+        response = filter_client.get('/tasks?limit=2&offset=2')
+        data = json.loads(response.data)
+        second_task_ids = [t['id'] for t in data['tasks']]
+        
+        # Ensure different tasks
+        assert first_task_ids != second_task_ids
+        assert data['pagination']['offset'] == 2
+
+    def test_pagination_last_page_no_more(self, filter_client):
+        """Test has_more is False on last page."""
+        response = filter_client.get('/tasks?limit=10&offset=0')
+        data = json.loads(response.data)
+        assert data['pagination']['has_more'] is False
+
+    def test_pagination_limit_capped_at_100(self, filter_client):
+        """Test limit is capped at 100."""
+        response = filter_client.get('/tasks?limit=200')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['pagination']['limit'] == 100
+
+    def test_pagination_negative_offset_defaults_to_zero(self, filter_client):
+        """Test negative offset defaults to 0."""
+        response = filter_client.get('/tasks?offset=-5')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['pagination']['offset'] == 0
+
+    def test_pagination_with_filtering(self, filter_client):
+        """Test pagination works with filtering."""
+        response = filter_client.get('/tasks?status=pending&limit=1')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert len(data['tasks']) == 1
+        assert data['tasks'][0]['status'] == 'pending'
+        assert data['total_count'] >= 2  # At least 2 pending tasks in sample data
+        assert data['pagination']['has_more'] == (data['total_count'] > 1)
+
 
 # ==================== Test src/api.py (CRUD API) ====================
 
