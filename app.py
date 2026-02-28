@@ -15,12 +15,14 @@ tasks = [
 @app.route('/tasks', methods=['GET'])
 def get_tasks():
     """
-    Get tasks with optional filtering by status, priority, and assignee_id.
+    Get tasks with optional filtering and pagination.
     
     Query parameters:
     - status: Filter by task status (pending, in_progress, completed)
     - priority: Filter by priority level (low, medium, high)
     - assignee_id: Filter by assignee ID
+    - limit: Number of tasks per page (default: 10, max: 100)
+    - offset: Number of tasks to skip (default: 0)
     """
     filtered_tasks = tasks.copy()
     
@@ -39,9 +41,31 @@ def get_tasks():
     if assignee_id is not None:
         filtered_tasks = [t for t in filtered_tasks if t['assignee_id'] == assignee_id]
     
+    # Pagination
+    total_count = len(filtered_tasks)
+    limit = request.args.get('limit', default=10, type=int)
+    offset = request.args.get('offset', default=0, type=int)
+    
+    # Validate pagination parameters
+    if limit < 1:
+        limit = 10
+    if limit > 100:
+        limit = 100
+    if offset < 0:
+        offset = 0
+    
+    # Apply pagination
+    paginated_tasks = filtered_tasks[offset:offset + limit]
+    
     return jsonify({
-        "tasks": filtered_tasks,
-        "count": len(filtered_tasks),
+        "tasks": paginated_tasks,
+        "count": len(paginated_tasks),
+        "total_count": total_count,
+        "pagination": {
+            "limit": limit,
+            "offset": offset,
+            "has_more": (offset + limit) < total_count
+        },
         "filters_applied": {
             "status": status,
             "priority": priority,
