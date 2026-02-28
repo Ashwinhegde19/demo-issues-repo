@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from datetime import datetime
+from src.models import validate_task
 
 app = Flask(__name__)
 
@@ -16,7 +17,7 @@ tasks = [
 def get_tasks():
     """
     Get tasks with optional filtering and pagination.
-    
+
     Query parameters:
     - status: Filter by task status (pending, in_progress, completed)
     - priority: Filter by priority level (low, medium, high)
@@ -25,27 +26,27 @@ def get_tasks():
     - offset: Number of tasks to skip (default: 0)
     """
     filtered_tasks = tasks.copy()
-    
+
     # Filter by status
     status = request.args.get('status')
     if status:
         filtered_tasks = [t for t in filtered_tasks if t['status'] == status]
-    
+
     # Filter by priority
     priority = request.args.get('priority')
     if priority:
         filtered_tasks = [t for t in filtered_tasks if t['priority'] == priority]
-    
+
     # Filter by assignee_id
     assignee_id = request.args.get('assignee_id', type=int)
     if assignee_id is not None:
         filtered_tasks = [t for t in filtered_tasks if t['assignee_id'] == assignee_id]
-    
+
     # Pagination
     total_count = len(filtered_tasks)
     limit = request.args.get('limit', default=10, type=int)
     offset = request.args.get('offset', default=0, type=int)
-    
+
     # Validate pagination parameters
     if limit < 1:
         limit = 10
@@ -53,10 +54,10 @@ def get_tasks():
         limit = 100
     if offset < 0:
         offset = 0
-    
+
     # Apply pagination
     paginated_tasks = filtered_tasks[offset:offset + limit]
-    
+
     return jsonify({
         "tasks": paginated_tasks,
         "count": len(paginated_tasks),
@@ -75,11 +76,19 @@ def get_tasks():
 
 @app.route('/tasks', methods=['POST'])
 def create_task():
-    """Create a new task."""
-    data = request.get_json()
+    """Create a new task with input validation."""
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    is_valid, errors = validate_task(data)
+    if not is_valid:
+        return jsonify({"error": "Validation failed", "fields": errors}), 400
+
     new_task = {
         "id": len(tasks) + 1,
         "title": data.get('title'),
+        "description": data.get('description', ''),
         "status": data.get('status', 'pending'),
         "priority": data.get('priority', 'medium'),
         "assignee_id": data.get('assignee_id')
